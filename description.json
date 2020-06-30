@@ -1,0 +1,17 @@
+{
+	"version": "1.0",
+	"description": "Simple ODEX AA. A fully decentralized onchain exchange for trading tokens issued on Obyte.",
+	"homepage_url": "https://github.com/jldevelops/simple-odex",
+	"source_url": "https://github.com/jldevelops/simple-odex",
+	"field_descriptions": {
+		"price": "Price you want to sell.",
+		"sell_asset": "ID of asset you want to sell (44 characters or base).",
+		"buy_asset": "ID of asset you want to buy (44 characters or base).",
+		"expiry_ts": "Optional, timestamp defining when the order expires.",
+		"lock": "Optional, timestamp defining order cancelation lock. Set 1 for a order which cant be cancelled (except if expires).",
+		"address": "Sell order beneficiary address. It is the address which also holds the power to cancel the order is being created.",
+		"id": "ID of order as shown on state vars.",
+		"cancel": "Command to cancel an opened order. Set the value to 1.",
+		"trade": "Command to match an opened order. Set the value to 1."
+	}
+}
