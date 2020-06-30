@@ -1,0 +1,273 @@
+{
+    "doc_url": "https://raw.githubusercontent.com/jldevelops/aa-dex/master/description.json",
+    init: `{
+        if(array_length(unit[trigger.unit].authors) != 1)
+            bounce('multi signature not allowed');
+        $total_bal = balance[base]-storage_size-trigger.output[[asset=base]]-var['user_bytes'];
+        if(trigger.output[[asset!=base]].asset != 'none'){
+            $asset = trigger.output[[asset!=base]].asset;
+            if($asset and $asset == 'ambiguous') 
+                bounce('Only 1 asset per tx');
+        }
+        else
+            $asset = 'base';
+        $fee = var['low_fee_mode']?200:2000;
+    }`,
+    "messages": {
+        "cases": [
+            {
+                if: `{!var['low_fee_mode'] AND $total_bal > 10000000}`,
+                "messages": [
+                    {
+                        "app": "payment",
+                        "payload": {
+                            "asset": 'base',
+                            "outputs": [
+                                {
+                                    "address": "{trigger.address}",
+                                    "amount": `{10000}`
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        app: 'state',
+                        state: `{
+                            var['low_fee_mode'] = true;
+                            response['message'] = 'Low fee mode active. Until AA depletion all operations are subsidized';
+                        }`  
+                    }
+                ]
+            },
+                {
+                    if:`{
+                        trigger.data.trade
+                    }`,
+                    "init": "{
+                        $id = trigger.data.id;
+                        if(!$id)
+                            bounce('id param not found');
+                        if(!var[$id])
+                            bounce('order not found');
+                        $order1 = json_parse(var[$id]);
+                        if ($order1.expiry_ts AND $order1.expiry_ts <= timestamp)
+                            bounce("order expired");
+                        if($order1.buy_asset != $asset)
+                            bounce('incorrect asset, please send '||$order1.buy_asset);
+
+                        $amount_left1 = var['left_' || $id];
+                        $amount_left2 = trigger.output[[asset=$asset]]-($asset == 'base'?$fee:0);
+                        // check if prices match
+                        $maker_price = $order1.price;
+                        $buy_amount1 = round($amount_left1 * $order1.price);
+                        if ($buy_amount1 >= $amount_left2){ // sent order is the smaller one
+                            $buy_amount2 = round($amount_left2 / $maker_price); 
+                            $amount_sold2 = $amount_left2;
+                            $amount_sold1 = $buy_amount2;
+                        }
+                        else{ // order1 is the smaller one
+                            bounce('please send less amount, max to exchange '||$buy_amount1);
+                        }
+                    }",
+                    "messages": [
+                    {
+                        "app": "payment",
+                        "payload": {
+                            "asset": `{$order1.sell_asset}`,
+                            "outputs": [
+                                {
+                                    "address": "{trigger.address}",
+                                    "amount": `{$buy_amount2}`
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "app": "payment",
+                        "payload": {
+                            "asset": `{$asset}`,
+                            "outputs": [
+                                {
+                                    "address": "{$order1.address}",
+                                    "amount": `{$amount_sold1}`
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        if: `{$asset != 'base'}`,
+                        "app": "payment",
+                        "payload": {
+                            "asset": 'base',
+                            "outputs": [
+                                {
+                                    "address": "{trigger.address}",
+                                    "amount": `{trigger.output[[asset=base]]-$fee}`
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        if: `{var['left_'||$id||'_base']}`,
+                        "app": "payment",
+                        "payload": {
+                            "asset": 'base',
+                            "outputs": [
+                                {
+                                    "address": "{$order1.address}",
+                                    "amount": `{var['left_'||$id||'_base']}`
+                                }
+                            ]
+                        }
+                    },
+                        {
+                            "app": "state",
+                            "state": "{
+                                var['left_' || $id] -= $amount_sold1;
+                                if($order1.sell_asset == 'base'){
+                                    var['user_bytes'] -= $amount_sold1;
+                                }
+                                if(var['left_' || $id] == 0){
+                                    var[$id] = false;
+                                    var['left_' ||$id] = false;
+                                    var['left_'||$id||'_base'] = false;
+                                }
+                                if(var['left_'||$id||'_base']){
+                                    var['user_bytes'] -= var['left_'||$id||'_base'];
+                                    var['left_'||$id||'_base'] = false;
+                                }
+                                if(var['low_fee_mode'] AND $total_bal < 50000)
+                                    var['low_fee_mode'] = false;
+                                
+                                response['amount_' || $order1.sell_asset] = $amount_sold1;
+                                response['amount_' || $order1.buy_asset] = $amount_sold2;
+                                response['event'] = 'trade';
+                            }"
+                        }
+                    ]
+                },
+            {
+                "if": "{trigger.data.cancel}",
+                "init": "{
+                    if($asset != 'base')
+                        bounce('asset not needed to cancel');
+                    $id = trigger.data.id;
+                    if(!$id)
+                        bounce('id param not found');
+                    if(!var[$id])
+                        bounce('order not found');
+                    $ord = json_stringify(var[$id]);
+                    if($ord.address != trigger.address)
+                        bounce('Not your order');
+                    if($ord.lock){
+                        if (!$ord.expiry_ts OR $order1.expiry_ts > timestamp){
+                            if($ord.lock < timestamp)
+                                bounce('locked order, must be traded, it could be cancelled on: '||($order1.expiry_ts?timestamp_to_string($order1.expiry_ts):'never on this universe'));
+                        }
+                    }
+                    $base = var['left_'||$id||'_base'];
+                    if($ord.sell_asset == 'base')
+                        $am = var['left_' ||$id]+trigger.output[[asset=base]]-$fee;
+                    else
+                        $am = var['left_' ||$id];
+                }",
+                "messages": [
+                    {
+                        "app": "payment",
+                        "payload": {
+                            "asset": `{$ord.sell_asset}`,
+                            "outputs": [
+                                {
+                                    "address": "{trigger.address}",
+                                    "amount": `{$am}`
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        if:`{$base}`,
+                        "app": "payment",
+                        "payload": {
+                            "asset": 'base',
+                            "outputs": [
+                                {
+                                    "address": "{trigger.address}",
+                                    "amount": `{$base+trigger.output[[asset=base]]-$fee}`
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "app": "state",
+                        "state": "{
+                            var[$id] = false;
+                            if($base)
+                                var['user_bytes'] -= $base;
+                            else{
+                                if($ord.sell_asset == 'base')
+                                    var['user_bytes'] -= var['left_' ||$id];
+                            }
+                            var['left_' ||$id] = false;
+                            var['left_'||$id||'_base'] = false;
+                            if(var['low_fee_mode'] AND $total_bal < 50000)
+                                var['low_fee_mode'] = false;
+                            response['event'] = 'cancel';
+                        }"
+                    }
+                ]
+            },
+            {
+                init: `{
+                    $id = trigger.unit;
+                    $null = trigger.data.lock;
+
+                    if (!trigger.data.price or trigger.data.price <= 0)
+                        bounce("no price param or incorrect one");
+                    
+                    if (!trigger.data.buy_asset)
+                        bounce('buy_asset missing');
+
+                    if(trigger.data.buy_asset != 'base' and !asset[trigger.data.buy_asset].exists)
+                        bounce('invalid buy_asset');
+
+                    if ($asset == trigger.data.buy_asset)
+                        bounce('same asset');
+                    
+                    if (trigger.data.expiry_ts AND trigger.data.expiry_ts <= timestamp)
+                        bounce("wrong expiry_ts");
+
+                    if (trigger.data.address AND !is_valid_address(trigger.data.address))
+                        bounce('address field must be a valid address');
+
+                    $txt_ob = '{"sell_asset":"'||$asset||'","buy_asset":"'||trigger.data.buy_asset||'","price":'||trigger.data.price||',"address":"'||(trigger.data.address?trigger.data.address:trigger.address)||(trigger.data.expiry_ts?(',"expiry_ts":'||trigger.data.expiry_ts):'')||(trigger.data.lock?(',"lock":'||trigger.data.lock):'')||'}';
+                    
+                }`,
+                "messages": [
+                    {
+                        "app": "state",
+                        "state": "{
+                            var[$id] = $txt_ob;
+                            var['left_' ||$id] = trigger.output[[asset=$asset]];
+                            if(trigger.data.buy_asset == 'base'){
+                                if(round(var['left_' ||$id] * trigger.data.price) <= 12000)
+                                    bounce('too few bytes to ask, send more asset');
+                            }
+                            if($asset == 'base'){
+                                var['left_' ||$id] -= $fee;
+                                var['user_bytes'] += var['left_' ||$id];
+                            }
+                            else{
+                                var['left_'||$id||'_base'] = trigger.output[[asset=base]]-$fee;
+                                var['user_bytes'] += var['left_' ||$id||'_base'];
+                            }
+                            if(var['low_fee_mode'] AND $total_bal < 50000)
+                                var['low_fee_mode'] = false;
+                            response['order_id'] = $id;
+                            response['event'] = 'create';
+                        }"
+                    }
+                ]
+            }
+        ]
+    }
+}
