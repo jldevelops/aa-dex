@@ -16,7 +16,7 @@
     "messages": {
         "cases": [
             {
-                if: `{!var['low_fee_mode'] AND $total_bal > 10000000}`,
+                if: `{!var['low_fee_mode'] AND $total_bal > 100000}`,
                 "messages": [
                     {
                         "app": "payment",
@@ -136,7 +136,7 @@
                                     var['user_bytes'] -= var['left_'||$id||'_base'];
                                     var['left_'||$id||'_base'] = false;
                                 }
-                                if(var['low_fee_mode'] AND $total_bal < 50000)
+                                if(var['low_fee_mode'] AND $total_bal < 20000)
                                     var['low_fee_mode'] = false;
                                 
                                 response['amount_' || $order1.sell_asset] = $amount_sold1;
@@ -209,7 +209,7 @@
                             }
                             var['left_' ||$id] = false;
                             var['left_'||$id||'_base'] = false;
-                            if(var['low_fee_mode'] AND $total_bal < 50000)
+                            if(var['low_fee_mode'] AND $total_bal < 20000)
                                 var['low_fee_mode'] = false;
                             response['event'] = 'cancel';
                         }"
@@ -238,15 +238,22 @@
 
                     if (trigger.data.address AND !is_valid_address(trigger.data.address))
                         bounce('address field must be a valid address');
-
-                    $txt_ob = '{"sell_asset":"'||$asset||'","buy_asset":"'||trigger.data.buy_asset||'","price":'||trigger.data.price||',"address":"'||(trigger.data.address?trigger.data.address:trigger.address)||(trigger.data.expiry_ts?(',"expiry_ts":'||trigger.data.expiry_ts):'')||(trigger.data.lock?(',"lock":'||trigger.data.lock):'')||'}';
                     
                 }`,
                 "messages": [
                     {
                         "app": "state",
                         "state": "{
-                            var[$id] = $txt_ob;
+                            $data = {};
+                            $data.sell_asset = $asset;
+                            $data.buy_asset = trigger.data.buy_asset;
+                            $data.price = trigger.data.price;
+                            $data.address = trigger.data.address?trigger.data.address:trigger.address;
+                            if(trigger.data.expiry_ts)
+                                $data.expiry_ts = trigger.data.expiry_ts;
+                            if(trigger.data.lock)
+                                $data.lock = trigger.data.lock;
+                            var[$id] = $data;
                             var['left_' ||$id] = trigger.output[[asset=$asset]];
                             if(trigger.data.buy_asset == 'base'){
                                 if(round(var['left_' ||$id] * trigger.data.price) <= 12000)
@@ -260,7 +267,7 @@
                                 var['left_'||$id||'_base'] = trigger.output[[asset=base]]-$fee;
                                 var['user_bytes'] += var['left_' ||$id||'_base'];
                             }
-                            if(var['low_fee_mode'] AND $total_bal < 50000)
+                            if(var['low_fee_mode'] AND $total_bal < 20000)
                                 var['low_fee_mode'] = false;
                             response['order_id'] = $id;
                             response['event'] = 'create';
