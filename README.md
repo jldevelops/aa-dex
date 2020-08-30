@@ -15,7 +15,7 @@ To see opened orders, check state vars.
 To cancel an order, send `cancel` = 1 along with the id.
 
 ## Fees
-Each operation costs 2 KB. When AA is filled to 10 MB, it changes the fee to 0,2 KB until their balance falls to 50KB.
+Each operation costs 2 KB. When AA is filled to 100 KB, it changes the fee to 0,2 KB until their balance falls to 20KB.
 
 ## Limitations
 Multi signature units are not allowed.
