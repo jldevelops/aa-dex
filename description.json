@@ -1,8 +1,8 @@
 {
 	"version": "1.0",
-	"description": "Simple ODEX AA. A fully decentralized onchain exchange for trading tokens issued on Obyte.",
-	"homepage_url": "https://github.com/jldevelops/simple-odex",
-	"source_url": "https://github.com/jldevelops/simple-odex",
+	"description": "AA-DEX. A fully decentralized onchain exchange for trading tokens issued on Obyte.",
+	"homepage_url": "https://github.com/jldevelops/aa-dex",
+	"source_url": "https://github.com/jldevelops/aa-dex",
 	"field_descriptions": {
 		"price": "Price you want to sell.",
 		"sell_asset": "ID of asset you want to sell (44 characters or base).",
